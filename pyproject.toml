@@ -9,6 +9,7 @@ dependencies = [
     "ipykernel>=7.3.0",
     "matplotlib>=3.11.1",
     "matplotlib-inline>=0.2.2",
+    "mendeleev>=1.2.0",
     "numpy>=2.5.1",
     "setuptools<70",
     "sympy>=1.14.0",

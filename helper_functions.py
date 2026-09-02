@@ -1,7 +1,11 @@
 # Helper functions
 
+import re
+from math import lcm
+
 import matplotlib.pyplot as plt
 import numpy as np
+import sympy as sp
 
 
 def fmt_vec(v, precision=2, type="f"):
@@ -177,3 +181,79 @@ def get_quadrant(angle_deg: float):
         return 3
     else:  # 270 < norm_angle < 360
         return 4
+
+
+def parse_formula(formula: str) -> dict[str, int]:
+    """Parses a chemical formula like 'Na2SO4' into a dictionary of element counts:
+
+    {'Na': 2, 'S': 1, 'O': 4}.
+    """
+    pattern = r"([A-Z][a-z]*)(\d*)"
+    matches = re.findall(pattern, formula)
+    counts = {}
+    for element, count in matches:
+        counts[element] = counts.get(element, 0) + (int(count) if count else 1)
+    return counts
+
+
+def balance_reaction(reactants: list[str], products: list[str]) -> str:
+    """Balances a chemical equation given lists of reactant and product formula strings.
+
+    Returns the formatted, balanced chemical equation.
+    """
+    all_compounds = reactants + products
+    num_reactants = len(reactants)
+
+    # 1. Collect all unique chemical elements across reactants and products
+    parsed_compounds = [parse_formula(comp) for comp in all_compounds]
+    all_elements = sorted(list(set(elem for comp in parsed_compounds for elem in comp)))
+
+    # 2. Build the coefficient matrix A (Elements x Compounds)
+    # Reactants have positive coefficients (+), Products have negative coefficients (-)
+    matrix_rows = []
+    for elem in all_elements:
+        row = []
+        for i, comp in enumerate(parsed_compounds):
+            count = comp.get(elem, 0)
+            row.append(count if i < num_reactants else -count)
+        matrix_rows.append(row)
+
+    A = sp.Matrix(matrix_rows)
+
+    # 3. Find the null space (kernel) of matrix A
+    null_space = A.nullspace()
+
+    if not null_space:
+        raise ValueError(
+            "The equation cannot be balanced (no non-trivial solution exists)."
+        )
+
+    # Take the basis vector from nullspace
+    sol_vector = null_space[0]
+
+    # 4. Clear denominators to obtain integer coefficients
+    denominators = [val.q for val in sol_vector]
+    common_denom = lcm(*denominators)
+
+    # Scale up by common denominator to make all terms integers
+    raw_coeffs = [int(val * common_denom) for val in sol_vector]
+
+    # Ensure all coefficients are positive
+    if any(c < 0 for c in raw_coeffs):
+        raw_coeffs = [-c for c in raw_coeffs]
+
+    # Simplify by dividing by the greatest common divisor (GCD)
+    overall_gcd = sp.gcd(raw_coeffs)
+    coeffs = [c // overall_gcd for c in raw_coeffs]
+
+    # 5. Format and print output equation
+    react_terms = []
+    for coeff, comp in zip(coeffs[:num_reactants], reactants):
+        react_terms.append(f"{coeff if coeff > 1 else ''}{comp}")
+
+    prod_terms = []
+    for coeff, comp in zip(coeffs[num_reactants:], products):
+        prod_terms.append(f"{coeff if coeff > 1 else ''}{comp}")
+
+    equation_str = " + ".join(react_terms) + " ==> " + " + ".join(prod_terms)
+    return equation_str
